@@ -1,0 +1,4 @@
+_target_: test.file_test.FileTest
+
+defaults:
+  _target_: pathlib.Path
