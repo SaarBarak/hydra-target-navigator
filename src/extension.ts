@@ -57,14 +57,34 @@ export function activate(context: vscode.ExtensionContext) {
             const parts = hydraTarget.split('.');
             const symbolName = parts[parts.length - 1];
             const lineNumber = findSymbolDefinitionLine(filePath, symbolName);
+    
+            // Read the file content to extract signature and docstring.
+            const fileContent = fs.readFileSync(filePath, 'utf8');
+            const parameters = extractSignature(fileContent, symbolName);
             const docString = getDocString(filePath, lineNumber);
-            if (docString) {
-                return new vscode.Hover(new vscode.MarkdownString(`**Docs for ${symbolName}:**\n\n${docString}`));
+    
+            // Build the hover message using a MarkdownString.
+            const markdown = new vscode.MarkdownString();
+            markdown.appendMarkdown(`**Signature for ${symbolName}:**\n\n`);
+            if (parameters.length > 0) {
+                // Render the parameters in a Python code block.
+                markdown.appendCodeblock(`(${parameters.join(', ')})`, 'python');
             } else {
-                return new vscode.Hover(`No documentation found for ${symbolName}.`);
+                markdown.appendMarkdown('_No parameters detected._');
             }
+            
+            if (docString) {
+                markdown.appendMarkdown(`\n\n**Documentation:**\n\n`);
+                // Render the docstring preserving its formatting.
+                markdown.appendMarkdown(docString);
+            }
+            // Trust the markdown so links, etc. can be rendered.
+            markdown.isTrusted = true;
+            return new vscode.Hover(markdown);
         }
     };
+    
+
 
     context.subscriptions.push(
         vscode.languages.registerDefinitionProvider({ language: 'yaml' }, definitionProvider)
@@ -85,7 +105,7 @@ export function activate(context: vscode.ExtensionContext) {
                 vscode.window.showErrorMessage("This command works only on Python files.");
                 return;
             }
-            // Get the symbol name from the selection or word under cursor.
+            // Get the symbol name from the selection or the word under the cursor.
             const selection = editor.selection;
             const wordRange = editor.document.getWordRangeAtPosition(selection.active, /[A-Za-z_0-9]+/);
             const symbolName = editor.document.getText(selection) || (wordRange && editor.document.getText(wordRange));
@@ -107,12 +127,18 @@ export function activate(context: vscode.ExtensionContext) {
                 .split('/')
                 .join('.');
             const fullDottedPath = `${modulePath}.${symbolName}`;
+            
             // Read the file content.
             const content = fs.readFileSync(filePath, 'utf8');
-            // Extract signature (parameters) from the symbol using our updated extractor.
+    
+            // Extract signature (parameters) from the symbol.
             const parameters = extractSignature(content, symbolName);
+            
+            // Optionally, extract documentation.
+            const lineNumber = findSymbolDefinitionLine(filePath, symbolName);
+            
             // Build the Hydra YAML snippet.
-            let snippet = `_target_: ${fullDottedPath}\n\n`;
+            let snippet = `_target_: ${fullDottedPath}\n`;
             if (parameters.length > 0) {
                 parameters.forEach(param => {
                     snippet += `${param}: \n`;
@@ -120,15 +146,14 @@ export function activate(context: vscode.ExtensionContext) {
             } else {
                 snippet += `# No parameters detected...\n`;
             }
+            
             // Copy the snippet to the clipboard.
             await vscode.env.clipboard.writeText(snippet);
             vscode.window.showInformationMessage("Hydra config snippet copied to clipboard!");
         })
     );
+    
 
-    vscode.workspace.onDidChangeTextDocument(e => {
-        diagnosticCollection.delete(e.document.uri);
-    });
 }
 
 export function deactivate() {
@@ -141,9 +166,16 @@ function addDiagnostic(document: vscode.TextDocument, position: vscode.Position,
     if (!range) {
         return;
     }
-    const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Error);
-    vscode.languages.createDiagnosticCollection('hydraTarget').set(document.uri, [diagnostic]);
+    // Get existing diagnostics for this file.
+    const currentDiagnostics = diagnosticCollection.get(document.uri) || [];
+    // Only add the diagnostic if it hasn't already been added.
+    if (!currentDiagnostics.some(diag => diag.message === message)) {
+        const diagnostic = new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Error);
+        diagnosticCollection.set(document.uri, [...currentDiagnostics, diagnostic]);
+    }
 }
+
+
 
 function getDocString(filePath: string, symbolLine: number): string | undefined {
     try {

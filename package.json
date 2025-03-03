@@ -1,9 +1,10 @@
 {
-  "name": "hydra-target-goto",
-  "displayName": "Hydra Target Go-to",
-  "description": "Go-to definition for Hydra config _target_ references in YAML files and copy Python targets as Hydra snippets.",
+  "name": "hydra-target-navigator",
+  "displayName": "Hydra Target Navigator",
+  "description": "Navigate Hydra config _target_ references in YAML files and copy Python targets as Hydra snippets.",
+  "icon": "img/image.png",
   "version": "0.1.0",
-  "publisher": "Saar Barak",
+  "publisher": "Saar-Barak",
   "engines": {
     "vscode": "^1.97.0"
   },
