@@ -3,6 +3,10 @@
   "displayName": "Hydra Target Navigator",
   "description": "Navigate Hydra config _target_ references in YAML files and copy Python targets as Hydra snippets.",
   "icon": "img/image.png",
+  "repository": {
+  "type": "git",
+  "url": "https://github.com/Saar-Barak/hydra-target-navigator.git"
+  },
   "version": "0.1.0",
   "publisher": "Saar-Barak",
   "engines": {

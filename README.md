@@ -17,8 +17,6 @@ Hydra-target-goto is a VS Code extension that enhances your workflow when workin
 - **Copy Target as Hydra:**  
   Right-click on a Python class or function and select "Copy Target as Hydra" to generate a Hydra configuration snippet with a fully-qualified target and a list of parameters extracted from the target’s signature.
 
-> ![Hydra Target Feature](images/feature-screenshot.png)
-
 ## Requirements
 
 - VS Code version 1.97.0 or higher.
@@ -87,7 +85,6 @@ Hydra-target-goto is a VS Code extension that enhances your workflow when workin
 - **Copy Target as Hydra:**  
   Right-click on a Python class or function and select "Copy Target as Hydra" to generate a Hydra configuration snippet with a fully-qualified target and a list of parameters extracted from the target’s signature.
 
-> ![Hydra Target Feature](images/feature-screenshot.png)
 
 ## Requirements
 
