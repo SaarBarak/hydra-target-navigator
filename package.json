@@ -4,8 +4,8 @@
   "description": "Navigate Hydra config _target_ references in YAML files and copy Python targets as Hydra snippets.",
   "icon": "img/image.png",
   "repository": {
-  "type": "git",
-  "url": "https://github.com/SaarBarak/hydra-target-navigator.git"
+    "type": "git",
+    "url": "https://github.com/SaarBarak/hydra-target-navigator.git"
   },
   "version": "0.1.0",
   "publisher": "Saar-Barak",
@@ -24,7 +24,10 @@
     "languages": [
       {
         "id": "yaml",
-        "extensions": [".yml", ".yaml"]
+        "extensions": [
+          ".yml",
+          ".yaml"
+        ]
       }
     ],
     "commands": [
@@ -55,16 +58,17 @@
   },
   "devDependencies": {
     "@types/js-yaml": "^4.0.9",
-    "@types/node": "20.x",
-    "@types/vscode": "^1.97.0",
     "@types/mocha": "^10.0.10",
+    "@types/node": "20.x",
+    "@types/uuid": "^10.0.0",
+    "@types/vscode": "^1.97.0",
     "@typescript-eslint/eslint-plugin": "^8.22.0",
     "@typescript-eslint/parser": "^8.22.0",
-    "eslint": "^9.19.0",
-    "typescript": "^5.7.3",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
-    "@vscode/vsce": "^2.32.0"
+    "@vscode/vsce": "^2.32.0",
+    "eslint": "^9.19.0",
+    "typescript": "^5.7.3"
   },
   "dependencies": {
     "js-yaml": "^4.1.0"

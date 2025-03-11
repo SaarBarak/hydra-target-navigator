@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import { findSymbolDefinitionLine, pythonPathToFilePath } from './utils';
+import { getPythonDefinitionFromLS } from './lsGoToDef'; // your new helper
 import { findHydraTargetValue } from './yamlUtils';
 
 let diagnosticCollection: vscode.DiagnosticCollection;
@@ -14,76 +15,102 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Definition Provider (unchanged)
     const definitionProvider: vscode.DefinitionProvider = {
-        provideDefinition(document, position, token) {
+        async provideDefinition(document, position, token) {
+            // 1) Check if this is a YAML doc and we actually have a hydraTarget
             if (document.languageId !== 'yaml') {
-                return;
+                return undefined;
             }
+            // Suppose you have a function findHydraTargetValue(document, position)
+            // that returns a dotted path like "torch.optim.lr_scheduler.ReduceLROnPlateau"
             const hydraTarget = findHydraTargetValue(document, position);
             if (!hydraTarget) {
-                return;
+                return undefined;
             }
-            const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-            const filePath = pythonPathToFilePath(hydraTarget, workspaceFolder);
-            if (!filePath) {
-                addDiagnostic(document, position, `Could not find file for target: ${hydraTarget}`);
-                return;
-            } else {
-                diagnosticCollection.delete(document.uri);
+            // 3) Ask the Python extension to find the real definition(s)
+            const locations = await getPythonDefinitionFromLS(hydraTarget);
+            if (!locations) {      // Optional: Show an error or add a diagnostic
+                vscode.window.showErrorMessage(`No definition found for: ${hydraTarget}`);
+                return undefined;
             }
-            const parts = hydraTarget.split('.');
-            const symbolName = parts[parts.length - 1];
-            const lineNumber = findSymbolDefinitionLine(filePath, symbolName);
-            const targetUri = vscode.Uri.file(filePath);
-            const targetPos = new vscode.Position(lineNumber, 0);
-            return new vscode.Location(targetUri, targetPos);
+
+            // 4) You can return the first location or all of them
+            //    If multiple definitions exist, you might want to open a peek.
+            return locations;
         }
     };
 
+
     // Hover Provider (unchanged)
     const hoverProvider: vscode.HoverProvider = {
-        provideHover(document, position, token) {
+        async provideHover(document, position, token) {
+            // Only handle YAML
             if (document.languageId !== 'yaml') {
-                return;
+                return undefined;
             }
+    
+            // Extract the Hydra dotted path from your YAML
             const hydraTarget = findHydraTargetValue(document, position);
             if (!hydraTarget) {
-                return;
+                return undefined;
             }
-            const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
-            const filePath = pythonPathToFilePath(hydraTarget, workspaceFolder);
+    
+            // 1) Get real location(s) via in-memory snippet + Python LS
+            const locations = await getPythonDefinitionFromLS(hydraTarget);
+            if (!locations || locations.length === 0) {
+                // If Python LS can’t find it
+                return new vscode.Hover(`**Target not found:** ${hydraTarget}`);
+            }
+    
+            // Typically there's 1 location; if more, pick the first or handle them all
+            const loc = locations[0];
+    
+            // 2) Convert the URI to a local filesystem path
+            const filePath = loc.uri.fsPath;
             if (!filePath) {
                 return new vscode.Hover(`**Target not found:** ${hydraTarget}`);
             }
-            const parts = hydraTarget.split('.');
-            const symbolName = parts[parts.length - 1];
+    
+            // 3) We have a real .py file now. Let’s parse out the docstring, parameters, etc.
+            //    In your current code, you do "extractSignature" and "getDocString" – re-use them:
+            const symbolName = hydraTarget.split('.').pop() || '';
+            // If you want the actual line from `loc.range`, you can do:
+            const definitionLineNumber = loc.range.start.line;
+    
+            // Read the file
+            const fileContent = fs.readFileSync(filePath, 'utf8');
+            
+            // Reuse your existing approach to find the signature line. 
+            // You can either trust `definitionLineNumber`, or run `findSymbolDefinitionLine(filePath, symbolName)`.
+            // In practice, the LS location might point exactly at the definition, so let's do a fresh search:
             const lineNumber = findSymbolDefinitionLine(filePath, symbolName);
     
-            // Read the file content to extract signature and docstring.
-            const fileContent = fs.readFileSync(filePath, 'utf8');
+            // Extract signature
             const parameters = extractSignature(fileContent, symbolName);
+    
+            // Extract docstring
             const docString = getDocString(filePath, lineNumber);
     
-            // Build the hover message using a MarkdownString.
+            // 4) Build a Markdown Hover
             const markdown = new vscode.MarkdownString();
             markdown.appendMarkdown(`**Signature for ${symbolName}:**\n\n`);
+    
             if (parameters.length > 0) {
-                // Render the parameters in a Python code block.
                 markdown.appendCodeblock(`(${parameters.join(', ')})`, 'python');
             } else {
                 markdown.appendMarkdown('_No parameters detected._');
             }
-            
+    
             if (docString) {
                 markdown.appendMarkdown(`\n\n**Documentation:**\n\n`);
-                // Render the docstring preserving its formatting.
                 markdown.appendMarkdown(docString);
             }
-            // Trust the markdown so links, etc. can be rendered.
+    
             markdown.isTrusted = true;
             return new vscode.Hover(markdown);
         }
     };
     
+
 
 
     context.subscriptions.push(
@@ -127,16 +154,16 @@ export function activate(context: vscode.ExtensionContext) {
                 .split('/')
                 .join('.');
             const fullDottedPath = `${modulePath}.${symbolName}`;
-            
+
             // Read the file content.
             const content = fs.readFileSync(filePath, 'utf8');
-    
+
             // Extract signature (parameters) from the symbol.
             const parameters = extractSignature(content, symbolName);
-            
+
             // Optionally, extract documentation.
             const lineNumber = findSymbolDefinitionLine(filePath, symbolName);
-            
+
             // Build the Hydra YAML snippet.
             let snippet = `_target_: ${fullDottedPath}\n`;
             if (parameters.length > 0) {
@@ -146,13 +173,13 @@ export function activate(context: vscode.ExtensionContext) {
             } else {
                 snippet += `# No parameters detected...\n`;
             }
-            
+
             // Copy the snippet to the clipboard.
             await vscode.env.clipboard.writeText(snippet);
             vscode.window.showInformationMessage("Hydra config snippet copied to clipboard!");
         })
     );
-    
+
 
 }
 
