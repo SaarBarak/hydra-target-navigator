@@ -1,6 +1,3 @@
-Below is a sample README.md for your hydra-target-goto extension:
-
----
 
 # hydra-target-goto
 
@@ -132,7 +129,3 @@ Use Visual Studio Code's Markdown editor for editing this README. Here are some 
 - [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
 
 **Enjoy using hydra-target-goto!**
-
----
-
-Feel free to adjust this README to fit any additional details or updates you make to your extension.
