@@ -53,12 +53,20 @@ ${aliasName}.${symbolName}
         }
         const position = new vscode.Position(symbolLine, symbolPos);
 
-        // 3) Ask the built-in Python extension to run "Go to Definition" on that symbol
-        const locations = (await vscode.commands.executeCommand(
-            'vscode.executeDefinitionProvider',
-            doc.uri,
-            position
-        )) as vscode.Location[] | undefined;
+        // 3) Wait a brief moment to ensure the Python extension is fully activated
+        await new Promise(resolve => setTimeout(resolve, 100));
+        let locations: vscode.Location[] | undefined;
+        try {
+            locations = (await vscode.commands.executeCommand(
+                'vscode.executeDefinitionProvider',
+                doc.uri,
+                position
+            )) as vscode.Location[] | undefined;
+        } catch (err) {
+            console.error("Error calling executeDefinitionProvider:", err);
+            return undefined;
+        }
+
 
         // Return results if found
         return locations && locations.length > 0 ? locations : undefined;

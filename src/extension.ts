@@ -29,10 +29,12 @@ export function activate(context: vscode.ExtensionContext) {
             // 3) Ask the Python extension to find the real definition(s)
             const locations = await getPythonDefinitionFromLS(hydraTarget);
             if (!locations) {      // Optional: Show an error or add a diagnostic
-                vscode.window.showErrorMessage(`No definition found for: ${hydraTarget}`);
+                // Instead of a popup, add an inline diagnostic (red underline)
+                addDiagnostic(document, position, `No definition found for: ${hydraTarget}`);
                 return undefined;
             }
-
+            // Clear any diagnostics if a definition is found
+            diagnosticCollection.delete(document.uri);
             // 4) You can return the first location or all of them
             //    If multiple definitions exist, you might want to open a peek.
             return locations;
@@ -122,6 +124,7 @@ export function activate(context: vscode.ExtensionContext) {
 
     // Register the new custom command "Copy Target as Hydra"
     context.subscriptions.push(
+        // Register the new custom command "Copy Target as Hydra"
         vscode.commands.registerCommand('extension.copyTargetAsHydra', async () => {
             const editor = vscode.window.activeTextEditor;
             if (!editor) {
@@ -141,29 +144,50 @@ export function activate(context: vscode.ExtensionContext) {
                 return;
             }
             const filePath = editor.document.uri.fsPath;
+            let modulePath = "";
             const workspaceFolder = vscode.workspace.getWorkspaceFolder(editor.document.uri);
-            if (!workspaceFolder) {
-                vscode.window.showErrorMessage("Workspace folder not found.");
-                return;
+            if (workspaceFolder) {
+                // Compute the relative file path and convert it to a dotted module path.
+                const relativePath = path.relative(workspaceFolder.uri.fsPath, filePath);
+                modulePath = relativePath.replace(/\\/g, '/').replace(/\.py$/, '');
+                // If the file is an __init__.py, remove it from the module path.
+                if (modulePath.endsWith('/__init__')) {
+                    modulePath = modulePath.substring(0, modulePath.length - '/__init__'.length);
+                }
+                modulePath = modulePath.split('/').join('.');
+            } else {
+                // Handle external packages by checking for common package directories.
+                const lowerPath = filePath.toLowerCase();
+                const sitePackagesIdx = lowerPath.indexOf('site-packages');
+                const distPackagesIdx = lowerPath.indexOf('dist-packages');
+                let pkgPath = "";
+                if (sitePackagesIdx !== -1) {
+                    pkgPath = filePath.substring(sitePackagesIdx + 'site-packages'.length + 1);
+                } else if (distPackagesIdx !== -1) {
+                    pkgPath = filePath.substring(distPackagesIdx + 'dist-packages'.length + 1);
+                } else {
+                    vscode.window.showErrorMessage("Workspace folder not found and file is not in a recognized package directory.");
+                    return;
+                }
+                // Remove the .py extension.
+                pkgPath = pkgPath.replace(/\.py$/, '');
+                // If the file is an __init__.py, remove it.
+                if (pkgPath.endsWith(path.sep + '__init__')) {
+                    pkgPath = pkgPath.substring(0, pkgPath.length - (`${path.sep}__init__`).length);
+                }
+                modulePath = pkgPath.split(path.sep).join('.');
             }
-            // Compute the relative file path and convert it to a dotted module path.
-            const relativePath = path.relative(workspaceFolder.uri.fsPath, filePath);
-            const modulePath = relativePath
-                .replace(/\\/g, '/')
-                .replace(/\.py$/, '')
-                .split('/')
-                .join('.');
             const fullDottedPath = `${modulePath}.${symbolName}`;
-
+    
             // Read the file content.
             const content = fs.readFileSync(filePath, 'utf8');
-
+    
             // Extract signature (parameters) from the symbol.
             const parameters = extractSignature(content, symbolName);
-
+    
             // Optionally, extract documentation.
             const lineNumber = findSymbolDefinitionLine(filePath, symbolName);
-
+    
             // Build the Hydra YAML snippet.
             let snippet = `_target_: ${fullDottedPath}\n`;
             if (parameters.length > 0) {
@@ -173,7 +197,7 @@ export function activate(context: vscode.ExtensionContext) {
             } else {
                 snippet += `# No parameters detected...\n`;
             }
-
+    
             // Copy the snippet to the clipboard.
             await vscode.env.clipboard.writeText(snippet);
             vscode.window.showInformationMessage("Hydra config snippet copied to clipboard!");
